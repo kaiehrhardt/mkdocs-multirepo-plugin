@@ -166,6 +166,110 @@ nav:
   - MkdocStrings: '!import https://github.com/mkdocstrings/mkdocstrings'
 ```
 
+## GitLab Groups Config
+
+Import all repositories from a GitLab group (including subgroups) automatically. This is useful when you have multiple documentation repositories under a single GitLab group and want to include them all without listing each one individually.
+
+### Basic Configuration
+
+```yaml
+plugins:
+  - multirepo:
+      groups:
+        - gitlab_group: 'https://gitlab.com/my-organization/my-group'
+```
+
+### Advanced Configuration with Filters
+
+```yaml
+plugins:
+  - multirepo:
+      cleanup: true
+      groups:
+        - gitlab_group: 'https://gitlab.com/my-organization/docs-team'
+          # (optional) only include repos with this default branch
+          branch: 'main'
+          # (optional) regex pattern to filter repo names
+          name_pattern: '^docs-.*'
+          # (optional) include archived repositories (default: false)
+          include_archived: false
+          # (optional) recursively include subgroups (default: true)
+          include_subgroups: true
+          # (optional) put all repos under this nav section path
+          section_path: 'team-docs'
+        
+        - gitlab_group: 'https://gitlab.example.com/another-group'
+          branch: 'master'
+          section_path: 'legacy'
+```
+
+### Authentication
+
+For **private groups**, you need to set an access token as an environment variable:
+
+- **`GitlabAccessToken`**: For local development and general CI/CD
+- **`GitlabCIJobToken`**: Automatically available in GitLab CI pipelines
+
+**Example for local development:**
+```bash
+export GitlabAccessToken="your-personal-access-token"
+mkdocs serve
+```
+
+**Example for GitLab CI:**
+```yaml
+# .gitlab-ci.yml
+build_docs:
+  script:
+    - export GitlabAccessToken=$CI_JOB_TOKEN
+    - mkdocs build
+```
+
+> **Note:** For public groups, no token is required.
+
+### Filter Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `gitlab_group` | `str` | *required* | GitLab group URL (e.g., `https://gitlab.com/my-group`) |
+| `branch` | `str` | `None` | Only include repos with this default branch |
+| `name_pattern` | `str` | `None` | Regex pattern to filter repository names |
+| `include_archived` | `bool` | `false` | Include archived repositories |
+| `include_subgroups` | `bool` | `true` | Recursively include repositories from subgroups |
+| `section_path` | `str` | `None` | Put all repos under this navigation path |
+
+### Examples
+
+**Include all non-archived repos from a group:**
+```yaml
+groups:
+  - gitlab_group: 'https://gitlab.com/my-company/documentation'
+```
+
+**Only include repos starting with "docs-" and using "main" branch:**
+```yaml
+groups:
+  - gitlab_group: 'https://gitlab.com/my-company/documentation'
+    branch: 'main'
+    name_pattern: '^docs-.*'
+```
+
+**Include repos from a self-hosted GitLab instance:**
+```yaml
+groups:
+  - gitlab_group: 'https://gitlab.mycompany.com/engineering/docs'
+    include_subgroups: true
+```
+
+**Organize multiple groups under different sections:**
+```yaml
+groups:
+  - gitlab_group: 'https://gitlab.com/company/frontend-docs'
+    section_path: 'frontend'
+  - gitlab_group: 'https://gitlab.com/company/backend-docs'
+    section_path: 'backend'
+```
+
 ## Run
 
 Once you're done configuring, run either `mkdocs serve` or `mkdocs build`. This will `import` the docs into a temporary directory and build the site.
@@ -221,7 +325,7 @@ that needs to be set based on which CI system you're using.
 | Tool     | Env Var | Notes |
 | -------- | ------- | ----- |
 | [Github](https://docs.github.com/en/actions) | `GithubAccessToken` | The access token should have access to `clone` all repos. This can be a personal access token or one from a GitHub App.
-| [Gitlab](https://docs.gitlab.com/ee/ci/) | `GitlabCIJobToken`  |
+| [Gitlab](https://docs.gitlab.com/ee/ci/) | `GitlabAccessToken` or `GitlabCIJobToken` | For GitLab Groups feature, use `GitlabAccessToken` for local development or `GitlabCIJobToken` (automatically available in GitLab CI). For basic repo imports, `GitlabCIJobToken` is sufficient.
 | [Azure Pipelines](https://azure.microsoft.com/en-us/products/devops/pipelines) | `AccessToken` |
 
 

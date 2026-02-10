@@ -236,12 +236,16 @@ class DocsRepo(Repo):
                               the global setting.
     """
 
-    def _fix_edit_uri(self, edit_uri: str) -> str:
+    def _fix_edit_uri(self, edit_uri: Optional[str]) -> str:
         """fixes the edit_uri based on what mkdocs sets it to by default"""
         # Mkdocs by default sets the edit_uri to 'edit/master/docs/' when the repo_url is GitHub and
         # 'src/default/docs/' when it's Bitbucket. We don't want docs to be in the edit_uri since
         # documentation isn't always in the docs directory for this plugin.
-        edit_uri_parts = edit_uri.strip("/").split("/")
+        # Guard against None being passed (some callers may pass None explicitly).
+        if not edit_uri:
+            edit_uri_parts = []
+        else:
+            edit_uri_parts = str(edit_uri).strip("/").split("/")
         parts = len(edit_uri_parts)
         if parts > 1 and edit_uri_parts[1] == "master" and self.branch != "master":
             edit_uri_parts[1] = self.branch

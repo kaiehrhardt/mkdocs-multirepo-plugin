@@ -45,6 +45,7 @@ class RepoConfig:
     section: str
     import_url: str
     section_path: Optional[str] = None
+    docs_dir: Optional[str] = None
 
 
 @dataclass
@@ -55,10 +56,22 @@ class NavRepoConfig:
 
 
 @dataclass
+class GroupConfig:
+    gitlab_group: str
+    branch: Optional[str] = None
+    name_pattern: Optional[str] = None
+    include_archived: bool = False
+    include_subgroups: bool = True
+    section_path: Optional[str] = None
+    docs_dir: Optional[str] = None
+
+
+@dataclass
 class MultirepoConfig:
     cleanup: bool = True
     repos: List[RepoConfig] = field(default_factory=list)
     nav_repos: List[NavRepoConfig] = field(default_factory=list)
+    groups: List[GroupConfig] = field(default_factory=list)
     imported_repo: bool = False
     temp_dir: str = "temp_dir"
     keep_docs_dir: bool = False
@@ -220,12 +233,14 @@ class MultirepoPlugin(BasePlugin):
                 derived_edit_uri = self.derive_config_edit_uri(
                     repo_name, import_stmt.get("url"), config
                 )
+            # Allow group-provided docs_dir to override import statement's docs_dir
+            resolved_docs_dir = repo.docs_dir or import_stmt.get("docs_dir", "docs/*")
             docs_repo_objs.append(
                 DocsRepo(
                     name=repo_name,
                     url=import_stmt.get("url"),
                     temp_dir=self.temp_dir,
-                    docs_dir=import_stmt.get("docs_dir", "docs/*"),
+                    docs_dir=resolved_docs_dir,
                     branch=import_stmt.get("branch", DEFAULT_BRANCH),
                     edit_uri=import_stmt.get("edit_uri")
                     or config.get("edit_uri")
@@ -270,6 +285,57 @@ class MultirepoPlugin(BasePlugin):
         asyncio_run(batch_execute(repos=docs_repo_objs, method=Repo.sparse_clone))
         return config
 
+    def handle_groups_import(
+        self, config: Config, groups: List[GroupConfig]
+    ) -> Config:
+        """Imports documentation from GitLab groups"""
+        from .gitlab_api import (
+            fetch_gitlab_group_repos,
+            GitLabException,
+        )
+        # Collect all repos from all groups
+        all_group_repos: List[RepoConfig] = []
+
+        for group in groups:
+            try:
+                # Fetch repositories from GitLab group
+                gitlab_repos = fetch_gitlab_group_repos(
+                    group_url=group.gitlab_group,
+                    branch_filter=group.branch,
+                    name_pattern=group.name_pattern,
+                    include_archived=group.include_archived,
+                    include_subgroups=group.include_subgroups,
+                )
+
+                # Convert GitLab repos to RepoConfig objects
+                for repo in gitlab_repos:
+                    # Build the import URL with the branch if specified in the group config
+                    # Otherwise, use the repo's default branch
+                    branch = group.branch or repo["default_branch"]
+                    import_url = f"{repo['url']}?branch={branch}"
+
+                    repo_config = RepoConfig(
+                        section=repo["name"],
+                        import_url=import_url,
+                        section_path=group.section_path,
+                        docs_dir=group.docs_dir,
+                    )
+                    all_group_repos.append(repo_config)
+
+            except GitLabException as e:
+                log.error(f"Failed to fetch GitLab group {group.gitlab_group}: {e}")
+                # Continue with other groups even if one fails
+                continue
+
+        if not all_group_repos:
+            log.warning("No repositories found in any of the specified GitLab groups")
+            return config
+
+        log.info(f"Found {len(all_group_repos)} repositories across all GitLab groups")
+
+        # Import all repos using the existing repos import handler
+        return self.handle_repos_import(config, all_group_repos)
+
     def on_config(self, config: Config) -> Config:
         try:
             multi_config: MultirepoConfig = dc.from_dict(
@@ -293,26 +359,36 @@ class MultirepoPlugin(BasePlugin):
                 self.temp_dir.mkdir()
             repos: RepoConfig = multi_config.repos
             nav_repos: NavRepoConfig = multi_config.nav_repos
+            groups: List[GroupConfig] = multi_config.groups
             nav: Optional[Dict[str, ...]] = config.get("nav")
-            if not nav and not repos and not nav_repos:
+            if not nav and not repos and not nav_repos and not groups:
                 return config
             if nav and repos:
                 log.warning(
                     "Multirepo plugin is ignoring plugins.multirepo.repos. Nav takes precedence."
+                )
+            if nav and groups:
+                log.warning(
+                    "Multirepo plugin is ignoring plugins.multirepo.groups. Nav takes precedence."
                 )
             if not nav and nav_repos:
                 log.warning(
                     "Multirepo plugin has nav_repos configuration without a nav section."
                 )
             log.info("Multirepo plugin importing docs...")
-            # nav takes precedence over repos
+            # nav takes precedence over repos and groups
             if nav:
                 config = self.handle_nav_import(config)
                 if nav_repos:
                     return self.handle_nav_repos_import(config, nav_repos)
                 return config
+            # navigation isn't defined but plugin section has groups
+            if groups:
+                config = self.handle_groups_import(config, groups)
             # navigation isn't defined but plugin section has repos
-            return self.handle_repos_import(config, repos)
+            if repos:
+                config = self.handle_repos_import(config, repos)
+            return config
 
     def on_files(self, files: Files, config: Config) -> Files:
         if self.config.get("imported_repo"):

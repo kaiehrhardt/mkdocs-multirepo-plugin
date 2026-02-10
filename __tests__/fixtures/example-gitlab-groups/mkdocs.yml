@@ -1,0 +1,76 @@
+site_name: Example Multi-Repo with GitLab Groups
+site_description: Example of using mkdocs-multirepo-plugin with GitLab groups
+
+# Example 1: Basic GitLab group import
+# Uncomment the configuration below and replace with your own GitLab group URL
+# 
+# plugins:
+#   - multirepo:
+#       groups:
+#         - gitlab_group: 'https://gitlab.com/my-organization/docs-team'
+
+# Example 2: GitLab group with filters
+# This example shows how to filter repositories by branch and name pattern
+# 
+# plugins:
+#   - multirepo:
+#       cleanup: true
+#       groups:
+#         - gitlab_group: 'https://gitlab.com/my-organization/docs-team'
+#           branch: 'main'
+#           name_pattern: '^docs-.*'
+#           include_archived: false
+#           include_subgroups: true
+#           section_path: 'team-docs'
+
+# Example 3: Multiple GitLab groups
+# You can import from multiple groups and organize them in different sections
+# 
+# plugins:
+#   - multirepo:
+#       groups:
+#         - gitlab_group: 'https://gitlab.com/company/frontend-docs'
+#           section_path: 'frontend'
+#           branch: 'main'
+#         
+#         - gitlab_group: 'https://gitlab.com/company/backend-docs'
+#           section_path: 'backend'
+#           branch: 'main'
+
+# Example 4: Combining groups with individual repos
+# You can mix GitLab groups with individual repository imports
+# 
+# plugins:
+#   - multirepo:
+#       groups:
+#         - gitlab_group: 'https://gitlab.com/company/docs-group'
+#           include_subgroups: true
+#       repos:
+#         - section: 'Special Project'
+#           import_url: 'https://github.com/example/special-docs?branch=main'
+
+# Example 5: Self-hosted GitLab instance
+# The plugin works with self-hosted GitLab instances as well
+# 
+# plugins:
+#   - multirepo:
+#       groups:
+#         - gitlab_group: 'https://gitlab.mycompany.com/engineering/documentation'
+#           include_subgroups: true
+
+# Authentication:
+# For private GitLab groups, set one of these environment variables:
+# 
+#   export GitlabAccessToken="your-personal-access-token"
+#   # or in GitLab CI, GitlabCIJobToken is automatically available
+#
+# Then run:
+#   mkdocs build
+#   # or
+#   mkdocs serve
+
+theme:
+  name: material
+
+nav:
+  - Home: index.md
