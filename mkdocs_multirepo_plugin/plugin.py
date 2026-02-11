@@ -60,6 +60,7 @@ class GroupConfig:
     gitlab_group: str
     branch: Optional[str] = None
     name_pattern: Optional[str] = None
+    exclude_pattern: Optional[str] = None
     include_archived: bool = False
     include_subgroups: bool = True
     section_path: Optional[str] = None
@@ -303,6 +304,7 @@ class MultirepoPlugin(BasePlugin):
                     group_url=group.gitlab_group,
                     branch_filter=group.branch,
                     name_pattern=group.name_pattern,
+                    exclude_pattern=group.exclude_pattern,
                     include_archived=group.include_archived,
                     include_subgroups=group.include_subgroups,
                 )

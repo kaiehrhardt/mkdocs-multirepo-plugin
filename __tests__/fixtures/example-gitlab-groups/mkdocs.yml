@@ -19,6 +19,7 @@ site_description: Example of using mkdocs-multirepo-plugin with GitLab groups
 #         - gitlab_group: 'https://gitlab.com/my-organization/docs-team'
 #           branch: 'main'
 #           name_pattern: '^docs-.*'
+#           exclude_pattern: '.*-deprecated$'
 #           include_archived: false
 #           include_subgroups: true
 #           section_path: 'team-docs'

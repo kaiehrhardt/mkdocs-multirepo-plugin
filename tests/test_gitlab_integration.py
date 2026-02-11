@@ -172,6 +172,34 @@ class TestApplyFilters(unittest.TestCase):
         filtered = gitlab_api._apply_filters(self.projects, name_pattern="[invalid")
         self.assertEqual(len(filtered), 3)  # Returns all non-archived
 
+    def test_filter_exclude_pattern(self):
+        """Test filtering with exclude pattern."""
+        filtered = gitlab_api._apply_filters(self.projects, exclude_pattern="^legacy-.*")
+        self.assertEqual(len(filtered), 3)
+        for project in filtered:
+            self.assertFalse(project["name"].startswith("legacy-"))
+
+    def test_filter_exclude_multiple_matches(self):
+        """Test exclude pattern matching multiple projects."""
+        filtered = gitlab_api._apply_filters(self.projects, exclude_pattern="^docs-.*")
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["name"], "api-service")
+
+    def test_filter_include_and_exclude(self):
+        """Test combining include and exclude patterns."""
+        # Include docs-* projects but exclude docs-backend
+        filtered = gitlab_api._apply_filters(
+            self.projects, name_pattern="^docs-.*", exclude_pattern=".*-backend$"
+        )
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["name"], "docs-frontend")
+
+    def test_filter_exclude_invalid_regex(self):
+        """Test that invalid exclude regex patterns are handled gracefully."""
+        # Should not raise exception, just log warning and ignore pattern
+        filtered = gitlab_api._apply_filters(self.projects, exclude_pattern="[invalid")
+        self.assertEqual(len(filtered), 3)  # Returns all non-archived
+
 
 class TestGitLabAPIIntegration(unittest.TestCase):
     """Test GitLab API integration with mocked responses."""

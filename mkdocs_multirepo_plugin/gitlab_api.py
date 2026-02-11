@@ -223,6 +223,7 @@ def _apply_filters(
     projects: List[Dict],
     branch_filter: Optional[str] = None,
     name_pattern: Optional[str] = None,
+    exclude_pattern: Optional[str] = None,
     include_archived: bool = False
 ) -> List[Dict]:
     """
@@ -232,6 +233,7 @@ def _apply_filters(
         projects: List of project dictionaries from GitLab API
         branch_filter: Only include projects with this default branch
         name_pattern: Regex pattern to match project names/paths
+        exclude_pattern: Regex pattern to exclude project names/paths
         include_archived: If False, excludes archived projects
 
     Returns:
@@ -247,7 +249,7 @@ def _apply_filters(
     if branch_filter:
         filtered = [p for p in filtered if p.get('default_branch') == branch_filter]
 
-    # Filter by name pattern
+    # Filter by name pattern (include)
     if name_pattern:
         try:
             pattern = re.compile(name_pattern)
@@ -258,6 +260,17 @@ def _apply_filters(
         except re.error as e:
             log.warning(f"Invalid regex pattern '{name_pattern}': {e}")
 
+    # Filter by exclude pattern
+    if exclude_pattern:
+        try:
+            pattern = re.compile(exclude_pattern)
+            filtered = [
+                p for p in filtered
+                if not (pattern.search(p.get('name', '')) or pattern.search(p.get('path', '')))
+            ]
+        except re.error as e:
+            log.warning(f"Invalid exclude regex pattern '{exclude_pattern}': {e}")
+
     return filtered
 
 
@@ -265,6 +278,7 @@ def fetch_gitlab_group_repos(
     group_url: str,
     branch_filter: Optional[str] = None,
     name_pattern: Optional[str] = None,
+    exclude_pattern: Optional[str] = None,
     include_archived: bool = False,
     include_subgroups: bool = True
 ) -> List[Dict[str, str]]:
@@ -275,6 +289,7 @@ def fetch_gitlab_group_repos(
         group_url: GitLab group URL (e.g., 'https://gitlab.com/my-group')
         branch_filter: Only include repos with this default branch (optional)
         name_pattern: Regex pattern to filter repo names (optional)
+        exclude_pattern: Regex pattern to exclude repo names (optional)
         include_archived: Include archived repositories (default: False)
         include_subgroups: Recursively include subgroups (default: True)
 
@@ -308,7 +323,7 @@ def fetch_gitlab_group_repos(
     log.info(f"Found {len(projects)} total repositories in group")
 
     # Apply filters
-    filtered_projects = _apply_filters(projects, branch_filter, name_pattern, include_archived)
+    filtered_projects = _apply_filters(projects, branch_filter, name_pattern, exclude_pattern, include_archived)
 
     if len(filtered_projects) < len(projects):
         log.info(f"After filtering: {len(filtered_projects)} repositories")
