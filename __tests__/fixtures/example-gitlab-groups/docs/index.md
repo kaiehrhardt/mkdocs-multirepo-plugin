@@ -78,6 +78,17 @@ groups:
     include_subgroups: false
 ```
 
+### Exclude Specific Subgroups
+Import repositories from all subgroups except specific ones:
+```yaml
+groups:
+  - gitlab_group: 'https://gitlab.com/my-org/docs'
+    include_subgroups: true
+    exclude_subgroups:
+      - 'my-org/docs/legacy'
+      - 'my-org/docs/archived'
+```
+
 ## Learn More
 
 See the main README.md for complete documentation on all available options.

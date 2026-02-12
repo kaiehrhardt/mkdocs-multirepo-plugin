@@ -63,6 +63,7 @@ class GroupConfig:
     exclude_pattern: Optional[str] = None
     include_archived: bool = False
     include_subgroups: bool = True
+    exclude_subgroups: Optional[List[str]] = None
     section_path: Optional[str] = None
     docs_dir: Optional[str] = None
 
@@ -307,6 +308,7 @@ class MultirepoPlugin(BasePlugin):
                     exclude_pattern=group.exclude_pattern,
                     include_archived=group.include_archived,
                     include_subgroups=group.include_subgroups,
+                    exclude_subgroups=group.exclude_subgroups,
                 )
 
                 # Convert GitLab repos to RepoConfig objects

@@ -200,6 +200,128 @@ class TestApplyFilters(unittest.TestCase):
         filtered = gitlab_api._apply_filters(self.projects, exclude_pattern="[invalid")
         self.assertEqual(len(filtered), 3)  # Returns all non-archived
 
+    def test_filter_exclude_subgroups(self):
+        """Test filtering by subgroup exclusion."""
+        # Add namespace information to projects
+        projects_with_namespace = [
+            {
+                "id": 1,
+                "name": "project-1",
+                "path": "project-1",
+                "http_url_to_repo": "https://gitlab.com/group/project-1.git",
+                "default_branch": "main",
+                "archived": False,
+                "namespace": {"full_path": "group"},
+            },
+            {
+                "id": 2,
+                "name": "project-2",
+                "path": "project-2",
+                "http_url_to_repo": "https://gitlab.com/group/subgroup1/project-2.git",
+                "default_branch": "main",
+                "archived": False,
+                "namespace": {"full_path": "group/subgroup1"},
+            },
+            {
+                "id": 3,
+                "name": "project-3",
+                "path": "project-3",
+                "http_url_to_repo": "https://gitlab.com/group/subgroup1/nested/project-3.git",
+                "default_branch": "main",
+                "archived": False,
+                "namespace": {"full_path": "group/subgroup1/nested"},
+            },
+            {
+                "id": 4,
+                "name": "project-4",
+                "path": "project-4",
+                "http_url_to_repo": "https://gitlab.com/group/subgroup2/project-4.git",
+                "default_branch": "main",
+                "archived": False,
+                "namespace": {"full_path": "group/subgroup2"},
+            },
+        ]
+
+        # Exclude subgroup1 (should exclude project-2 and project-3)
+        filtered = gitlab_api._apply_filters(
+            projects_with_namespace, exclude_subgroups=["group/subgroup1"]
+        )
+        self.assertEqual(len(filtered), 2)
+        self.assertEqual(filtered[0]["name"], "project-1")
+        self.assertEqual(filtered[1]["name"], "project-4")
+
+    def test_filter_exclude_multiple_subgroups(self):
+        """Test excluding multiple subgroups."""
+        projects_with_namespace = [
+            {
+                "id": 1,
+                "name": "project-1",
+                "namespace": {"full_path": "group"},
+                "archived": False,
+                "default_branch": "main",
+            },
+            {
+                "id": 2,
+                "name": "project-2",
+                "namespace": {"full_path": "group/subgroup1"},
+                "archived": False,
+                "default_branch": "main",
+            },
+            {
+                "id": 3,
+                "name": "project-3",
+                "namespace": {"full_path": "group/subgroup2"},
+                "archived": False,
+                "default_branch": "main",
+            },
+        ]
+
+        # Exclude both subgroups
+        filtered = gitlab_api._apply_filters(
+            projects_with_namespace,
+            exclude_subgroups=["group/subgroup1", "group/subgroup2"],
+        )
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["name"], "project-1")
+
+    def test_filter_exclude_subgroups_with_other_filters(self):
+        """Test combining subgroup exclusion with other filters."""
+        projects_with_namespace = [
+            {
+                "id": 1,
+                "name": "docs-project",
+                "path": "docs-project",
+                "namespace": {"full_path": "group"},
+                "archived": False,
+                "default_branch": "main",
+            },
+            {
+                "id": 2,
+                "name": "docs-service",
+                "path": "docs-service",
+                "namespace": {"full_path": "group/subgroup1"},
+                "archived": False,
+                "default_branch": "main",
+            },
+            {
+                "id": 3,
+                "name": "api-project",
+                "path": "api-project",
+                "namespace": {"full_path": "group"},
+                "archived": False,
+                "default_branch": "main",
+            },
+        ]
+
+        # Exclude subgroup1 and filter by name pattern
+        filtered = gitlab_api._apply_filters(
+            projects_with_namespace,
+            name_pattern="^docs-.*",
+            exclude_subgroups=["group/subgroup1"],
+        )
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(filtered[0]["name"], "docs-project")
+
 
 class TestGitLabAPIIntegration(unittest.TestCase):
     """Test GitLab API integration with mocked responses."""

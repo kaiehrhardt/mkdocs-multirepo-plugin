@@ -234,8 +234,10 @@ build_docs:
 | `gitlab_group` | `str` | *required* | GitLab group URL (e.g., `https://gitlab.com/my-group`) |
 | `branch` | `str` | `None` | Only include repos with this default branch |
 | `name_pattern` | `str` | `None` | Regex pattern to filter repository names |
+| `exclude_pattern` | `str` | `None` | Regex pattern to exclude repository names |
 | `include_archived` | `bool` | `false` | Include archived repositories |
 | `include_subgroups` | `bool` | `true` | Recursively include repositories from subgroups |
+| `exclude_subgroups` | `list[str]` | `None` | List of subgroup paths to exclude (e.g., `['group/subgroup1']`) |
 | `section_path` | `str` | `None` | Put all repos under this navigation path |
 
 ### Examples
@@ -259,6 +261,16 @@ groups:
 groups:
   - gitlab_group: 'https://gitlab.mycompany.com/engineering/docs'
     include_subgroups: true
+```
+
+**Exclude specific subgroups from a group:**
+```yaml
+groups:
+  - gitlab_group: 'https://gitlab.com/my-company/documentation'
+    include_subgroups: true
+    exclude_subgroups:
+      - 'my-company/documentation/legacy'
+      - 'my-company/documentation/archived'
 ```
 
 **Organize multiple groups under different sections:**

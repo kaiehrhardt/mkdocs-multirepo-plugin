@@ -224,7 +224,8 @@ def _apply_filters(
     branch_filter: Optional[str] = None,
     name_pattern: Optional[str] = None,
     exclude_pattern: Optional[str] = None,
-    include_archived: bool = False
+    include_archived: bool = False,
+    exclude_subgroups: Optional[List[str]] = None
 ) -> List[Dict]:
     """
     Apply filters to a list of GitLab projects.
@@ -235,6 +236,7 @@ def _apply_filters(
         name_pattern: Regex pattern to match project names/paths
         exclude_pattern: Regex pattern to exclude project names/paths
         include_archived: If False, excludes archived projects
+        exclude_subgroups: List of subgroup paths to exclude (e.g., ['subgroup1', 'group/subgroup2'])
 
     Returns:
         Filtered list of projects
@@ -248,6 +250,19 @@ def _apply_filters(
     # Filter by branch
     if branch_filter:
         filtered = [p for p in filtered if p.get('default_branch') == branch_filter]
+
+    # Filter by subgroup exclusion
+    if exclude_subgroups:
+        excluded = []
+        for subgroup_path in exclude_subgroups:
+            excluded.extend([
+                p for p in filtered
+                if p.get('namespace', {}).get('full_path', '').startswith(subgroup_path)
+            ])
+        if excluded:
+            excluded_ids = {p.get('id') for p in excluded}
+            filtered = [p for p in filtered if p.get('id') not in excluded_ids]
+            log.info(f"Excluded {len(excluded)} repositories from subgroups: {', '.join(exclude_subgroups)}")
 
     # Filter by name pattern (include)
     if name_pattern:
@@ -280,7 +295,8 @@ def fetch_gitlab_group_repos(
     name_pattern: Optional[str] = None,
     exclude_pattern: Optional[str] = None,
     include_archived: bool = False,
-    include_subgroups: bool = True
+    include_subgroups: bool = True,
+    exclude_subgroups: Optional[List[str]] = None
 ) -> List[Dict[str, str]]:
     """
     Fetch all repositories from a GitLab group with optional filtering.
@@ -292,6 +308,7 @@ def fetch_gitlab_group_repos(
         exclude_pattern: Regex pattern to exclude repo names (optional)
         include_archived: Include archived repositories (default: False)
         include_subgroups: Recursively include subgroups (default: True)
+        exclude_subgroups: List of subgroup paths to exclude (optional)
 
     Returns:
         List of dictionaries with keys:
@@ -323,7 +340,14 @@ def fetch_gitlab_group_repos(
     log.info(f"Found {len(projects)} total repositories in group")
 
     # Apply filters
-    filtered_projects = _apply_filters(projects, branch_filter, name_pattern, exclude_pattern, include_archived)
+    filtered_projects = _apply_filters(
+        projects, 
+        branch_filter, 
+        name_pattern, 
+        exclude_pattern, 
+        include_archived,
+        exclude_subgroups
+    )
 
     if len(filtered_projects) < len(projects):
         log.info(f"After filtering: {len(filtered_projects)} repositories")
