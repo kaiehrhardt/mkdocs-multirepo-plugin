@@ -54,10 +54,12 @@ plugins:
       keep_docs_dir: true
 ```
 
-You'll now have 3 ways of importing docs:
+You'll now have multiple ways of importing docs:
 
-- [plugins.multirepo.repos](#repos-config): Use this method if you don't have a `nav` section in the imported `mkdocs.yml` and want Mkdocs to generate navigation based on the directory structure. If there's a `nav` this configuration will be ignored since `nav` configuration takes precedence.
-- [plugins.multirepo.nav_repos](#nav-repos-config): Use this if you have a `nav` section in your `mkdocs.yml` and want to refer to imported docs in the `nav` the same way as other docs in the repo. This can be used alongside `!import` statements.
+- [plugins.multirepo.repos](#repos-config): Use this method if you don't have a `nav` section in the imported `mkdocs.yml` and want Mkdocs to generate navigation based on the directory structure.
+- [plugins.multirepo.nav_repos](#nav-repos-config): Use this if you have a `nav` section in your `mkdocs.yml` and want to refer to imported docs in the `nav` the same way as other docs in the repo.
+- [plugins.multirepo.groups](#groups-config): Import documentation from all repositories in a GitLab group.
+- [plugins.multirepo.artifact_groups](#artifact-groups-config): Import documentation from GitLab CI/CD job artifacts (great for pre-built docs).
 - [!import](#import-statement): Used to specify docs to import to a section in the `nav`. The imported repo needs to have a `mkdocs.yml` file with a `nav` section as well.
 
 ## Import Statement
@@ -255,6 +257,156 @@ groups:
     branch: 'main'
     name_pattern: '^docs-.*'
 ```
+
+## Artifact Groups Config
+
+The `artifact_groups` configuration allows you to import documentation from **GitLab CI/CD job artifacts** instead of cloning repositories. This is useful when:
+
+- Documentation is built as part of your CI/CD pipeline
+- You want to include pre-processed or generated documentation
+- You need to import docs from private repos without granting repository access
+
+### Basic Usage
+
+```yaml
+plugins:
+  - multirepo:
+      artifact_groups:
+        - gitlab_group: 'https://gitlab.com/my-org/docs-projects'
+          # (optional) branch to fetch artifacts from (default: project's default branch)
+          branch: 'main'
+          # (optional) CI job name that produces the artifact
+          # if not specified, the plugin will auto-detect common documentation jobs
+          job_name: 'pages'
+          # (optional) glob pattern for files to extract from artifact (default: 'public/**')
+          artifact_path: 'public/**'
+          # (optional) regex pattern to filter project names
+          name_pattern: '^docs-.*'
+          # (optional) put all artifacts under this nav section path
+          section_path: 'team-docs'
+```
+
+### How It Works
+
+1. The plugin fetches all projects from the specified GitLab group
+2. For each project, it finds the latest successful CI/CD job on the specified branch
+3. It downloads the job's artifacts (ZIP file)
+4. It extracts files matching the `artifact_path` pattern
+5. The extracted documentation is added to your MkDocs site
+
+### Job Name Auto-Detection
+
+If you don't specify `job_name`, the plugin automatically searches for jobs with these names (in order):
+
+1. `pages`
+2. `build_docs`
+3. `docs`
+4. `documentation`
+5. `mkdocs`
+6. `build:docs`
+
+If none of these are found, it uses the first successful job with artifacts.
+
+### Artifact Path Patterns
+
+The `artifact_path` parameter supports glob patterns to specify which files to extract:
+
+```yaml
+# Extract everything from the 'public' directory
+artifact_path: 'public/**'
+
+# Extract only markdown files
+artifact_path: 'docs/**/*.md'
+
+# Extract from multiple paths (comma-separated)
+artifact_path: 'public/**, assets/**'
+
+# Extract specific files
+artifact_path: 'site/*'
+```
+
+### Authentication
+
+For **private projects**, you need to set an access token:
+
+- **`GitlabAccessToken`**: For local development and general CI/CD
+- **`GitlabCIJobToken`**: Automatically available in GitLab CI pipelines
+
+**Example:**
+```bash
+export GitlabAccessToken="your-personal-access-token"
+mkdocs serve
+```
+
+### Filter Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `gitlab_group` | `str` | *required* | GitLab group URL (e.g., `https://gitlab.com/my-group`) |
+| `branch` | `str` | `None` | Branch to fetch artifacts from (uses project's default branch if not specified) |
+| `job_name` | `str` | `None` | CI job name (auto-detects if not specified) |
+| `artifact_path` | `str` | `public/**` | Glob pattern for files to extract from artifact |
+| `name_pattern` | `str` | `None` | Regex pattern to filter project names |
+| `exclude_pattern` | `str` | `None` | Regex pattern to exclude project names |
+| `include_archived` | `bool` | `false` | Include archived projects |
+| `include_subgroups` | `bool` | `true` | Recursively include projects from subgroups |
+| `exclude_subgroups` | `list[str]` | `None` | List of subgroup paths to exclude |
+| `section_path` | `str` | `None` | Nav section path where all artifacts should be placed |
+
+### Examples
+
+**Basic artifact import:**
+```yaml
+artifact_groups:
+  - gitlab_group: 'https://gitlab.com/my-org/docs-projects'
+```
+
+**Import from specific job and path:**
+```yaml
+artifact_groups:
+  - gitlab_group: 'https://gitlab.com/my-org/docs-projects'
+    branch: 'main'
+    job_name: 'pages'
+    artifact_path: 'public/**'
+    section_path: 'team-docs'
+```
+
+**Complete configuration with both Git repos and artifacts:**
+```yaml
+plugins:
+  - multirepo:
+      # Regular Git-based imports
+      groups:
+        - gitlab_group: 'https://gitlab.com/my-org/source-repos'
+          branch: 'main'
+          section_path: 'source-docs'
+      
+      # Artifact-based imports
+      artifact_groups:
+        - gitlab_group: 'https://gitlab.com/my-org/built-docs'
+          branch: 'main'
+          job_name: 'pages'
+          artifact_path: 'public/**'
+          name_pattern: '^prod-.*'
+          section_path: 'built-docs'
+        
+        - gitlab_group: 'https://gitlab.com/my-org/legacy'
+          branch: 'master'
+          artifact_path: 'site/**'
+          include_archived: true
+          section_path: 'legacy-docs'
+```
+
+### Differences: Artifacts vs. Git Repos
+
+| Feature | Git Repos (`groups`) | Artifacts (`artifact_groups`) |
+|---------|---------------------|-------------------------------|
+| Source | Git repository | CI/CD job artifacts |
+| Authentication | Git credentials | GitLab API token |
+| Speed | Sparse clone (fast) | Download + extract |
+| Edit URLs | Yes | No (artifacts have no edit URLs) |
+| Version | Branch/tag/commit | Latest artifact from branch |
+| Storage | Temporary Git clone | Extracted files |
 
 **Include repos from a self-hosted GitLab instance:**
 ```yaml

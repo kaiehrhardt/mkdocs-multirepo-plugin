@@ -69,11 +69,26 @@ class GroupConfig:
 
 
 @dataclass
+class ArtifactGroupConfig:
+    gitlab_group: str
+    branch: Optional[str] = None
+    job_name: Optional[str] = None
+    artifact_path: str = "public/**"
+    name_pattern: Optional[str] = None
+    exclude_pattern: Optional[str] = None
+    include_archived: bool = False
+    include_subgroups: bool = True
+    exclude_subgroups: Optional[List[str]] = None
+    section_path: Optional[str] = None
+
+
+@dataclass
 class MultirepoConfig:
     cleanup: bool = True
     repos: List[RepoConfig] = field(default_factory=list)
     nav_repos: List[NavRepoConfig] = field(default_factory=list)
     groups: List[GroupConfig] = field(default_factory=list)
+    artifact_groups: List[ArtifactGroupConfig] = field(default_factory=list)
     imported_repo: bool = False
     temp_dir: str = "temp_dir"
     keep_docs_dir: bool = False
@@ -340,6 +355,66 @@ class MultirepoPlugin(BasePlugin):
         # Import all repos using the existing repos import handler
         return self.handle_repos_import(config, all_group_repos)
 
+    def handle_artifact_groups_import(
+        self, config: Config, artifact_groups: List[ArtifactGroupConfig]
+    ) -> Config:
+        """Imports documentation from GitLab group artifacts"""
+        from .gitlab_artifacts import fetch_artifact_group_repos, GitLabException
+
+        # Process each artifact group
+        for artifact_group in artifact_groups:
+            try:
+                # Fetch artifacts from all projects in the group
+                artifact_dirs = fetch_artifact_group_repos(
+                    gitlab_group=artifact_group.gitlab_group,
+                    branch=artifact_group.branch,
+                    job_name=artifact_group.job_name,
+                    artifact_path=artifact_group.artifact_path,
+                    name_pattern=artifact_group.name_pattern,
+                    exclude_pattern=artifact_group.exclude_pattern,
+                    include_archived=artifact_group.include_archived,
+                    include_subgroups=artifact_group.include_subgroups,
+                    exclude_subgroups=artifact_group.exclude_subgroups,
+                    temp_dir=self.temp_dir,
+                )
+
+                if not artifact_dirs:
+                    log.warning(
+                        f"No artifacts extracted from GitLab group {artifact_group.gitlab_group}"
+                    )
+                    continue
+
+                # Create DocsRepo objects for each extracted artifact
+                for project_name, artifact_dir in artifact_dirs.items():
+                    section_slug = slugify(text=project_name, lowercase=False)
+                    path = artifact_group.section_path
+                    repo_name = f"{path}/{section_slug}" if path is not None else section_slug
+
+                    # Create a DocsRepo-like object for artifact files
+                    # We use DocsRepo to get all the necessary attributes and methods
+                    artifact_repo = DocsRepo(
+                        name=repo_name,
+                        url=f"{artifact_group.gitlab_group}/{project_name}",  # Pseudo URL
+                        branch=artifact_group.branch or "main",
+                        temp_dir=self.temp_dir,
+                        docs_dir="",  # Empty since we already have the files
+                        edit_uri=None,  # No edit URL for artifacts
+                    )
+                    # Override location to point to artifact directory
+                    artifact_repo.location = artifact_dir
+                    
+                    # Store the repo for file processing
+                    self.repos[repo_name] = artifact_repo
+
+            except GitLabException as e:
+                log.error(
+                    f"Failed to fetch artifacts from GitLab group {artifact_group.gitlab_group}: {e}"
+                )
+                # Continue with other groups even if one fails
+                continue
+
+        return config
+
     def on_config(self, config: Config) -> Config:
         try:
             multi_config: MultirepoConfig = dc.from_dict(
@@ -364,8 +439,9 @@ class MultirepoPlugin(BasePlugin):
             repos: RepoConfig = multi_config.repos
             nav_repos: NavRepoConfig = multi_config.nav_repos
             groups: List[GroupConfig] = multi_config.groups
+            artifact_groups: List[ArtifactGroupConfig] = multi_config.artifact_groups
             nav: Optional[Dict[str, ...]] = config.get("nav")
-            if not nav and not repos and not nav_repos and not groups:
+            if not nav and not repos and not nav_repos and not groups and not artifact_groups:
                 return config
             if nav and repos:
                 log.warning(
@@ -374,6 +450,10 @@ class MultirepoPlugin(BasePlugin):
             if nav and groups:
                 log.warning(
                     "Multirepo plugin is ignoring plugins.multirepo.groups. Nav takes precedence."
+                )
+            if nav and artifact_groups:
+                log.warning(
+                    "Multirepo plugin is ignoring plugins.multirepo.artifact_groups. Nav takes precedence."
                 )
             if not nav and nav_repos:
                 log.warning(
@@ -386,6 +466,9 @@ class MultirepoPlugin(BasePlugin):
                 if nav_repos:
                     return self.handle_nav_repos_import(config, nav_repos)
                 return config
+            # navigation isn't defined but plugin section has artifact_groups
+            if artifact_groups:
+                config = self.handle_artifact_groups_import(config, artifact_groups)
             # navigation isn't defined but plugin section has groups
             if groups:
                 config = self.handle_groups_import(config, groups)
